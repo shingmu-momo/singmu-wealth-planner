@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>高階財富增值與實質購買力推演系統</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- html2pdf.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+body {
+    font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    background-color: #f3f4f6;
+}
+
+.transition-opacity-400 {
+    transition: opacity 0.4s ease-in-out;
+}
+
+.recalculating {
+    opacity: 0.2;
+}
+
+#custom-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(17, 24, 39, 0.9);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+}
+
+#custom-toast.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.chart-container {
+    position: relative;
+    height: 450px;
+    width: 100%;
+}
+
+.print-only {
+    display: none;
+}
+
+@media print {
+    body { background-color: white; }
+    .no-print { display: none !important; }
+    .print-only { display: block; }
+
+    .avoid-break {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .print-layout {
+        max-width: 100%;
+        margin: 0;
+        padding: 10px;
+    }
+}
+</style>
+</head>
+<body class="text-gray-800 p-4 md:p-6 print-layout" id="app-container">
+
+<!-- Toast 通知 -->
+<div id="custom-toast">通知內容</div>
+
+<!-- 頂部標題與操作區 -->
+<header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-gray-300 avoid-break">
+    <div>
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 tracking-wide">財富增值與實質購買力推演</h1>
+        <p class="text-gray-500 mt-1 flex items-center gap-2">
+            專屬顧問：
+            <input
+                type="text"
+                id="advisor-name-input"
+                placeholder="點此輸入顧問姓名"
+                value="顧問姓名"
+                class="font-semibold text-gray-700 border-b border-dashed border-gray-400 bg-transparent outline-none focus:border-blue-500 px-1 w-48 no-print"
+            >
+            <span id="advisor-name-print" class="font-semibold text-gray-700 print-only"></span>
+        </p>
+    </div>
+    <div class="mt-4 md:mt-0 flex space-x-3 no-print">
+        <button onclick="resetSimulation()" class="px-5 py-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition font-medium text-gray-700 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            重新推演
+        </button>
+        <button onclick="exportToPDF()" class="px-5 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition font-medium flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            匯出 PDF 報告
+        </button>
+    </div>
+</header>
+
+<!-- 主體內容區 -->
+<div class="flex flex-col lg:flex-row gap-6 mb-8">
+
+    <!-- 左側：宏觀環境設定 -->
+    <div class="lg:w-1/4 bg-white p-5 rounded-xl shadow-sm border border-gray-200 avoid-break">
+        <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+            <svg class="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            宏觀環境設定
+        </h2>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">推演總年期 (年)</label>
+                <input type="number" id="global-years" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" value="20" min="1" max="100">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">預估通膨率 (%)</label>
+                <input type="number" id="global-inflation" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" value="2.0" step="0.1" min="0">
+            </div>
+        </div>
+
+        <div class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100 print-only text-sm text-blue-800">
+            <p class="font-bold mb-1">顧問備註與聲明：</p>
+            <p>本報告依據上述假設參數進行線性推演，未包含稅賦成本或通膨之年度浮動。計算採年化簡化公式，實際數字可能因各商品之逐月宣告利率或實際績效而有所差異。資料僅供策略規劃參考。</p>
+        </div>
+    </div>
+
+    <!-- 右側：方案參數輸入卡片 (四宮格) -->
+    <div class="lg:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-4 avoid-break">
+
+        <!-- 方案：銀行定存 -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-gray-400">
+            <h3 class="font-bold text-gray-700 mb-3">🏦 銀行定存 (對照組)</h3>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">月投入(元)</label>
+                    <input type="number" id="plan-bank-monthly" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-gray-400" value="10000" min="0" step="1000">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">繳費年期</label>
+                    <input type="number" id="plan-bank-payYears" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-gray-400" value="10" min="1">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">預期 IRR(%)</label>
+                    <input type="number" id="plan-bank-irr" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-gray-400" value="1.5" step="0.1">
+                </div>
+            </div>
+        </div>
+
+        <!-- 方案：保險A -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
+            <h3 class="font-bold text-gray-700 mb-3">🛡️ 保險方案 A</h3>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">月投入(元)</label>
+                    <input type="number" id="plan-a-monthly" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500" value="10000" min="0" step="1000">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">繳費年期</label>
+                    <input type="number" id="plan-a-payYears" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500" value="10" min="1">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">預期 IRR(%)</label>
+                    <input type="number" id="plan-a-irr" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500" value="3.5" step="0.1">
+                </div>
+            </div>
+        </div>
+
+        <!-- 方案：保險B -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-green-500">
+            <h3 class="font-bold text-gray-700 mb-3">🛡️ 保險方案 B</h3>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">月投入(元)</label>
+                    <input type="number" id="plan-b-monthly" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-green-500" value="0" min="0" step="1000">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">繳費年期</label>
+                    <input type="number" id="plan-b-payYears" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-green-500" value="6" min="1">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">預期 IRR(%)</label>
+                    <input type="number" id="plan-b-irr" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-green-500" value="4.0" step="0.1">
+                </div>
+            </div>
+        </div>
+
+        <!-- 方案：保險C -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-orange-500">
+            <h3 class="font-bold text-gray-700 mb-3">🛡️ 保險方案 C</h3>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">月投入(元)</label>
+                    <input type="number" id="plan-c-monthly" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-orange-500" value="0" min="0" step="1000">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">繳費年期</label>
+                    <input type="number" id="plan-c-payYears" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-orange-500" value="20" min="1">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">預期 IRR(%)</label>
+                    <input type="number" id="plan-c-irr" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-orange-500" value="5.0" step="0.1">
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- 視覺化與摘要區塊 -->
+<div id="results-container" class="transition-opacity-400">
+    <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-600 pl-3 avoid-break">推演結果摘要 (<span id="summary-years">20</span>年後)</h2>
+    <div id="summary-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 avoid-break">
+        <!-- 卡片由 JS 動態生成 -->
+    </div>
+
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 avoid-break">
+        <h2 class="text-lg font-bold text-gray-800 mb-2">實質購買力推演軌跡</h2>
+        <div class="chart-container">
+            <canvas id="simulationChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 方案定義與顏色配置
+    const PLANS = [
+        { id: 'bank', name: '銀行定存', color: '#9ca3af', bgAlpha: 'rgba(156, 163, 175, 0.15)', isDashed: true },
+        { id: 'a',    name: '保險方案 A', color: '#3b82f6', bgAlpha: 'rgba(59, 130, 246, 0.15)',  isDashed: false },
+        { id: 'b',    name: '保險方案 B', color: '#10b981', bgAlpha: 'rgba(16, 185, 129, 0.15)',  isDashed: false },
+        { id: 'c',    name: '保險方案 C', color: '#f97316', bgAlpha: 'rgba(249, 115, 22, 0.15)',  isDashed: false }
+    ];
+
+    // 預設參數 (供重置使用)
+    const DEFAULT_PARAMS = {
+        global: { years: 20, inflation: 2.0 },
+        bank:   { monthly: 10000, payYears: 10, irr: 1.5 },
+        a:      { monthly: 10000, payYears: 10, irr: 3.5 },
+        b:      { monthly: 0,     payYears: 6,  irr: 4.0 },
+        c:      { monthly: 0,     payYears: 20, irr: 5.0 }
+    };
+
+    let simChart = null;
+
+    // 初始化
+    window.onload = () => {
+        // 顧問姓名：輸入框即時同步到列印用 span
+        const nameInput = document.getElementById('advisor-name-input');
+        const namePrint = document.getElementById('advisor-name-print');
+        namePrint.innerText = nameInput.value;
+        nameInput.addEventListener('input', () => {
+            namePrint.innerText = nameInput.value;
+        });
+
+        setupEventListeners();
+        calculateAndRender();
+    };
+
+    // 自訂 Toast 通知
+    function showCustomAlert(message, duration = 3000) {
+        const toast = document.getElementById('custom-toast');
+        toast.innerText = message;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), duration);
+    }
+
+    // 金額格式化
+    function formatCurrency(amount) {
+        return 'NT$ ' + Math.round(amount).toLocaleString('en-US');
+    }
+
+    // 設定所有輸入框的監聽事件
+    function setupEventListeners() {
+        document.querySelectorAll('input[type="number"]').forEach(input => {
+            input.addEventListener('input', () => triggerRecalculation());
+        });
+    }
+
+    // 觸發重新計算
+    function triggerRecalculation(animate = false) {
+        const container = document.getElementById('results-container');
+        if (animate) {
+            container.classList.add('recalculating');
+            setTimeout(() => {
+                calculateAndRender();
+                container.classList.remove('recalculating');
+            }, 400);
+        } else {
+            calculateAndRender();
+        }
+    }
+
+    // 重置推演
+    function resetSimulation() {
+        document.getElementById('global-years').value    = DEFAULT_PARAMS.global.years;
+        document.getElementById('global-inflation').value = DEFAULT_PARAMS.global.inflation;
+
+        PLANS.forEach(plan => {
+            document.getElementById(`plan-${plan.id}-monthly`).value   = DEFAULT_PARAMS[plan.id].monthly;
+            document.getElementById(`plan-${plan.id}-payYears`).value  = DEFAULT_PARAMS[plan.id].payYears;
+            document.getElementById(`plan-${plan.id}-irr`).value       = DEFAULT_PARAMS[plan.id].irr;
+        });
+
+        triggerRecalculation(true);
+        showCustomAlert('參數已重置完畢');
+    }
+
+    // 核心計算與渲染
+    function calculateAndRender() {
+        const totalYears    = parseInt(document.getElementById('global-years').value)     || 0;
+        const inflationRate = parseFloat(document.getElementById('global-inflation').value) / 100 || 0;
+
+        document.getElementById('summary-years').innerText = totalYears;
+
+        const chartData = {
+            labels: Array.from({ length: totalYears }, (_, i) => `第 ${i + 1} 年`),
+            datasets: []
+        };
+
+        const summaryData = [];
+        let maxChartValue = 0;
+
+        PLANS.forEach(plan => {
+            const monthly = parseFloat(document.getElementById(`plan-${plan.id}-monthly`).value) || 0;
+            if (monthly <= 0) return;
+
+            const payYears  = parseInt(document.getElementById(`plan-${plan.id}-payYears`).value) || 0;
+            const irr       = parseFloat(document.getElementById(`plan-${plan.id}-irr`).value) / 100 || 0;
+            const annualAmt = monthly * 12;
+
+            let currentNominalVal = 0;
+            const trajectoryReal  = [];
+            let totalPrincipal    = 0;
+
+            for (let y = 1; y <= totalYears; y++) {
+                if (y <= payYears) {
+                    // 修正版：舊資金享整年複利，新投入享半年複利
+                    currentNominalVal = currentNominalVal * (1 + irr) + annualAmt * (1 + irr * 0.5);
+                    totalPrincipal += annualAmt;
+                } else {
+                    // 停扣後純滾利
+                    currentNominalVal = currentNominalVal * (1 + irr);
+                }
+
+                const currentRealVal = currentNominalVal / Math.pow(1 + inflationRate, y);
+                trajectoryReal.push(currentRealVal);
+                if (currentRealVal > maxChartValue) maxChartValue = currentRealVal;
+            }
+
+            chartData.datasets.push({
+                label:           plan.name,
+                data:            trajectoryReal,
+                borderColor:     plan.color,
+                backgroundColor: plan.bgAlpha,
+                borderWidth:     2,
+                borderDash:      plan.isDashed ? [5, 5] : [],
+                fill:            !plan.isDashed,
+                pointRadius:     0,
+                pointHoverRadius: 6,
+                tension:         0.4
+            });
+
+            // 修正：顯示的繳費年期不超過推演總年期
+            const displayPayYears = Math.min(payYears, totalYears);
+
+            summaryData.push({
+                name:           plan.name,
+                color:          plan.color,
+                payYears:       displayPayYears,
+                totalPrincipal: totalPrincipal,
+                finalNominal:   currentNominalVal,
+                finalReal:      trajectoryReal[totalYears - 1] || 0
+            });
+        });
+
+        renderSummaryCards(summaryData);
+        renderChart(chartData, maxChartValue);
+    }
+
+    // 渲染摘要卡片
+    function renderSummaryCards(data) {
+        const container = document.getElementById('summary-cards');
+        container.innerHTML = '';
+
+        if (data.length === 0) {
+            container.innerHTML = '<div class="col-span-full text-center py-6 text-gray-500">尚無有效方案（請設定月投入金額大於 0）</div>';
+            return;
+        }
+
+        data.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-xl shadow-sm border p-4 relative overflow-hidden';
+            card.style.borderTopWidth = '4px';
+            card.style.borderTopColor = item.color;
+
+            card.innerHTML = `
+                <h3 class="font-bold text-gray-800 text-lg mb-2">${item.name}</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">繳費年期</span>
+                        <span class="font-medium text-gray-700">${item.payYears} 年</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">總投入本金</span>
+                        <span class="font-medium text-gray-700">${formatCurrency(item.totalPrincipal)}</span>
+                    </div>
+                    <div class="pt-2 border-t border-gray-100">
+                        <div class="text-xs text-gray-400 mb-1">帳面數字 (名目)</div>
+                        <div class="text-sm font-medium text-gray-500 line-through decoration-gray-300">${formatCurrency(item.finalNominal)}</div>
+                    </div>
+                    <div class="bg-gray-50 p-2 rounded-lg mt-1">
+                        <div class="text-xs font-semibold" style="color:${item.color}">實質購買力</div>
+                        <div class="text-xl font-bold text-gray-900">${formatCurrency(item.finalReal)}</div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    // 繪製或更新 Chart.js（相容 v4）
+    function renderChart(chartData, maxValue) {
+        const ctx = document.getElementById('simulationChart').getContext('2d');
+        const useTenThousand = maxValue > 5000000;
+
+        if (simChart) {
+            simChart.destroy();
+        }
+
+        simChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: { family: "'PingFang TC', 'Microsoft JhengHei', sans-serif" }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                        titleFont: { size: 14, family: "'PingFang TC', 'Microsoft JhengHei', sans-serif" },
+                        bodyFont:  { size: 13, family: "'PingFang TC', 'Microsoft JhengHei', sans-serif" },
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + formatCurrency(context.parsed.y);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:   { color: '#e5e7eb' },
+                        border: { display: false }
+                    },
+                    y: {
+                        grid:   { color: '#e5e7eb' },
+                        border: { display: false },
+                        ticks: {
+                            callback: function(value) {
+                                if (useTenThousand) {
+                                    return (value / 10000).toLocaleString() + ' 萬';
+                                }
+                                return value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 匯出 PDF（先將 canvas 轉圖片，避免版面跑掉）
+    function exportToPDF() {
+        showCustomAlert('PDF 匯出中，請稍候...');
+
+        const canvas  = document.getElementById('simulationChart');
+        const chartImg = document.createElement('img');
+        chartImg.src = simChart ? simChart.toBase64Image('image/png', 1.0) : '';
+        chartImg.style.width       = '100%';
+        chartImg.style.height      = '450px';
+        chartImg.style.objectFit   = 'contain';
+
+        // 暫時替換 canvas 為靜態圖片
+        canvas.parentNode.replaceChild(chartImg, canvas);
+
+        const opt = {
+            margin:      [8, 8, 8, 8],
+            filename:    '財富增值與實質購買力推演報告.pdf',
+            image:       { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
+            jsPDF:       { unit: 'mm', format: 'a4', orientation: 'landscape' },
+            pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        html2pdf().set(opt).from(document.getElementById('app-container')).save().then(() => {
+            chartImg.parentNode.replaceChild(canvas, chartImg);
+            showCustomAlert('PDF 匯出完成！');
+        }).catch(err => {
+            chartImg.parentNode.replaceChild(canvas, chartImg);
+            console.error(err);
+            showCustomAlert('匯出失敗，請檢查主控台錯誤。');
+        });
+    }
+</script>
+
+</body>
+</html>
